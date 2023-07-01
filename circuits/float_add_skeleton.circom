@@ -149,36 +149,6 @@ template CheckBitLength(b) {
     signal output out;
 
     // TODO
-    // convert `in` into b-bits long form and sum all b-bits
-    signal bits_slice[b];
-    for (var i = 0; i < b; i++) {
-        bits_slice[i] <-- (in >> i) & 1;
-        bits_slice[i] * (1 - bits_slice[i]) === 0;
-    }
-
-    var sum_of_bits = 0;
-    for (var i = 0; i < b; i++) {
-        sum_of_bits += (2 ** i) * bits_slice[i];
-    }
-
-    /* Method 1; Leverage existed template */
-    component check_bit_equal = IsEqual();
-    check_bit_equal.in[0] <== in;
-    check_bit_equal.in[1] <== sum_of_bits;
-
-    out <== check_bit_equal.out;
-
-    /* Method 2: Create the circuit on our own */
-    // signal check_bit_equal;
-    // signal diff;
-    // signal inv;
-
-    // diff <== in - sum_of_bits;
-    // inv <-- diff != 0 ? 1 / diff : 0;
-    // check_bit_equal <== -diff * inv + 1;    // if diff is non-zero, diff * inv = 1
-    // diff * check_bit_equal === 0;   // constraint the witness appropriately
-
-    // out <== check_bit_equal;
 }
 
 /*
@@ -228,18 +198,6 @@ template RightShift(b, shift) {
     signal output y;
 
     // TODO
-    // check the length of x
-    component check_x_len = CheckBitLength(b);
-    check_x_len.in <== x;
-    check_x_len.out === 1;
-
-    // Right-shift x by `shift` bits
-    y <-- x >> shift;
-
-    // // (Trivial) check the length of y
-    // component check_y_len = CheckBitLength(b-shift);
-    // check_y_len.in <== y;
-    // check_y_len.out === 1;
 }
 
 /*
@@ -302,31 +260,6 @@ template LeftShift(shift_bound) {
     signal output y;
 
     // TODO
-    // If shift_bound < shift, shift_num = 0
-    var shift_num = 0;
-    signal check_eq[shift_bound];
-
-    for (var i = 0; i < shift_bound; i++) {
-        check_eq[i] <-- shift - i == 0 ? 1 : 0;  // check_eq = 1 iif i == shift
-        check_eq[i] * (shift - i) === 0;
-        shift_num += check_eq[i] * (1 << i);
-    }
-
-    // If shift > shift_bound, shift_num = valid_shift = 0
-    // If skip_checks = 1, constraints does not matter
-    signal valid_shift <-- shift_num != 0 ? 1 : 0;
-    (1 - valid_shift) * (1 - skip_checks) === 0;
-
-    y <== shift_num * x;
-
-
-    // // Falsely code structure in HDL
-    // if (skip_checks == 1) {
-    //     y <-- x << shift;
-    // }
-    // else {
-    //     // contraints
-    // }
 }
 
 /*
@@ -342,37 +275,6 @@ template MSNZB(b) {
     signal output one_hot[b];
 
     // TODO
-    // Find the i for one-hot vector first
-    signal valid_lower_bound[b];
-    signal valid_upper_bound[b];
-    for (var i = 0; i < b; i++) {
-        // valid_lower_bound[i] = LessThan(b);
-        // valid_upper_bound[i] = LessThan(b);
-
-        valid_lower_bound[i] <-- (2 ** i) <= in ? 1 : 0;
-        // valid_lower_bound[i].in[0] <== 2 ** i;
-        // valid_lower_bound[i].in[1] <== in;
-
-        valid_upper_bound[i] <-- in < (2 ** (i + 1)) ? 1 : 0;
-        // valid_upper_bound[i].in[0] <== in;
-        // valid_upper_bound[i].in[1] <== 2 ** (i + 1);
-
-        one_hot[i] <== valid_lower_bound[i] * valid_upper_bound[i];
-    }
-
-    // check `in` is non_zero
-    component zero_in = IsZero();
-    zero_in.in <== in;
-    zero_in.out * (1 - skip_checks) === 0;
-
-    // check output is valid
-    component one_hot_integer = Bits2Num(b);
-    component valid_output = CheckBitLength(b);
-    for (var i = 0; i < b; i++) {
-        one_hot_integer.bits[i] <== one_hot[i];
-    }
-    valid_output.in <== one_hot_integer.out;
-    (1 - valid_output.out) * (1 - skip_checks) === 0;
 }
 
 /*
@@ -391,36 +293,6 @@ template Normalize(k, p, P) {
     assert(P > p);
 
     // TODO
-    component ell = MSNZB(P+1);
-    ell.in <== m;
-    ell.skip_checks <== skip_checks;
-
-    // Find the difference between old and new precision
-    // P: new precision
-    // p: old precision
-    // P >= msnzb > p
-
-    // p + diff_e = msnzb
-    // msnzb + diff_m = P
-
-    var diff_e = 0;
-    var diff_m = 0;
-
-    for (var i = 0; i < P+1; i++) {
-        diff_e += ell.one_hot[i] * (i - p);
-        diff_m += ell.one_hot[i] * (P - i);
-    }
-    e_out <== e + diff_e;
-    // log(P, p, diff_e, diff_m);
-    
-
-    component left_shift_m = LeftShift(P-p+1);
-    left_shift_m.x <== m;
-    left_shift_m.shift <== diff_m;
-    left_shift_m.skip_checks <== skip_checks;
-
-    m_out <== left_shift_m.y;
-    // log(e, m, e_out, m_out);
 }
 
 /*
@@ -437,86 +309,4 @@ template FloatAdd(k, p) {
     signal output m_out;
 
     // TODO
-    // Check the well-formedness
-    component check_well_formed[2];
-    for (var i = 0; i < 2; i++) {
-        check_well_formed[i] = CheckWellFormedness(k, p);
-        check_well_formed[i].e <== e[i];
-        check_well_formed[i].m <== m[i];
-    }
-
-    // Find larger number by arragning numbers in the order of their magnitude
-    component mgn[2];
-    component first_mgn_is_smaller = LessThan(p+k+2);   // Comparison over k+p+1 bits 
-    for (var i = 0; i < 2; i++) {
-        mgn[i] = LeftShift(p+2);
-        mgn[i].x <== e[i];
-        mgn[i].shift <== p + 1;
-        mgn[i].skip_checks <== 0;
-        first_mgn_is_smaller.in[i] <== mgn[i].y + m[i];
-    }
-
-    // outL is alpha_e, outR is beta_e
-    component switcher_mgn_e = Switcher();
-    switcher_mgn_e.sel <== first_mgn_is_smaller.out;
-    switcher_mgn_e.L <== e[0];
-    switcher_mgn_e.R <== e[1];
-
-    // outL is alpha_m, outR is beta_m
-    component switcher_mgn_m = Switcher();
-    switcher_mgn_m.sel <== first_mgn_is_smaller.out;
-    switcher_mgn_m.L <== m[0];
-    switcher_mgn_m.R <== m[1];
-
-    // Calculate the difference of exponents to check
-    // 1. Difference too large (diff > p + 1)
-    // 2. Alpha_e is zero (alpha_e == 0)
-    // If not above, the result is the sume of the two numbers
-    signal diff <== switcher_mgn_e.outL - switcher_mgn_e.outR;
-    component large_diff_exist = LessThan(k);     // exponents are k bits
-    large_diff_exist.in[0] <== p + 1;
-    large_diff_exist.in[1] <== diff;
-
-    component alpha_e_isz = IsZero();
-    alpha_e_isz.in <== switcher_mgn_e.outL;
-
-    // Using OR gate to combine two condition
-    component skip_sum = OR();
-    skip_sum.a <== large_diff_exist.out;
-    skip_sum.b <== alpha_e_isz.out;
-
-    // Left-shift alpha_m by diff bits to align the mantissa
-    component alpha_m_lsh = LeftShift(p+2);
-    alpha_m_lsh.x <== switcher_mgn_m.outL;
-    alpha_m_lsh.shift <== diff;
-    alpha_m_lsh.skip_checks <== skip_sum.out;
-
-    // Add the aligned mantissa to get an unnormalized output mantissa
-    component normalized = Normalize(k, p, 2*p+1);  // two b bits sum is at most 2*b+1 bits
-    normalized.e <== switcher_mgn_e.outR;   // e = beta_e
-    normalized.m <== alpha_m_lsh.y + switcher_mgn_m.outR;   // m = alpha_m + beta_m
-    normalized.skip_checks <== skip_sum.out;
-
-    // Round normalized mantissa by p+1 bits
-    // to get a p+1-bit mantissa with precision p
-    component rounded = RoundAndCheck(k, p, 2*p+1);
-    rounded.e <== normalized.e_out;
-    rounded.m <== normalized.m_out;
-
-    // Use If-else gate to set (e_out, m_out)
-    // by the condition of skip_sum.out
-    component final_e = IfThenElse();
-    final_e.cond <== skip_sum.out;
-    final_e.L <== switcher_mgn_e.outL;  // skip_sum == 1
-    final_e.R <== rounded.e_out;
-
-    component final_m = IfThenElse();
-    final_m.cond <== skip_sum.out;
-    final_m.L <== switcher_mgn_m.outL;  // skip_sum == 1
-    final_m.R <== rounded.m_out;
-
-    // If skip_sum == 1, (e_out, m_out) = (alpha_e, alpha_m)
-    // else, (e_out, m_out) = (rounded_e, rounded_m)
-    e_out <== final_e.out;
-    m_out <== final_m.out;
 }
